@@ -305,8 +305,8 @@ Runs the reviewer automatically whenever a PR is opened, updated, or reopened in
 
 ```bash
 # 1. Get the code
-git clone https://github.com/YOUR_USERNAME/ai-pr-reviewer.git
-cd ai-pr-reviewer
+git clone https://github.com/username/repo.git
+cd repo
 
 # 2. Create a virtual environment (recommended)
 python3 -m venv venv
@@ -355,11 +355,6 @@ python -c "from config import Config; c = Config(); print('✅ Key loaded:', c.g
 python main.py --pr https://github.com/owner/repo/pull/42
 ```
 
-### Review your own PR
-
-```bash
-python main.py --pr https://github.com/deepanshuiiitv/AI-powered-PR-review-system/pull/1
-```
 
 ### Save to file
 
@@ -503,6 +498,8 @@ This tool makes 3 API calls per review. You can review ~1,600 PRs/hour with a fr
 ## How the AI Review Works
 
 The system sends this information to the AI for each review:
+
+```gh pr create --base {base branch} --head {head branch}```
 
 ```
 PR TITLE:    Fix SQL injection in login endpoint
