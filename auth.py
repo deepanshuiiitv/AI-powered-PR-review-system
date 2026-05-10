@@ -3,7 +3,7 @@ def auth(username, password):
         return True
     else:
         return False
-    
+      
 def main():
     username = input("Enter username: ")
     password = input("Enter password: ")
@@ -15,3 +15,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
