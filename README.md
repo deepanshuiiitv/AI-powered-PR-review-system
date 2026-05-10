@@ -46,57 +46,58 @@ It gives each PR a **score out of 10** and a verdict: `APPROVE`, `REQUEST_CHANGE
 ## Architecture
 
 ```
-                        Developer
+Developer
                             │
                    python main.py --pr URL
                             │
                     ┌───────▼────────┐
                     │   main.py      │  ← CLI entry point
                     │  (orchestrator)│
-                    └──────┬─────────┘
-                           │ loads
-                    ┌──────▼─────────┐
+                    └───────┬────────┘
+                            │ loads
+                    ┌───────▼────────┐
                     │   config.py    │  ← reads .env file
-                    └──────┬─────────┘
-               ┌───────────┴────────────┐
-               │                        │
-       ┌───────▼────────┐    ┌──────────▼──────────┐
-       │github_client.py│    │    pr_parser.py      │
-       │                │    │                      │
-       │ • get PR meta  │    │ • filter lock files  │
-       │ • get files    │    │ • chunk large diffs  │
-       │ • get raw diff │    │ • build AI context   │
-       └───────┬────────┘    └──────────┬───────────┘
-               │                        │
-       ┌───────▼────────┐               │
-       │  GitHub API    │               │ parsed PR dict
-       │  (free, HTTPS) │               │
-       └───────┬────────┘               │
-               │ diff + files           │
-               └──────────┬─────────────┘
-                           │
-                  ┌────────▼─────────┐
-                  │  ai_reviewer.py  │  ← sends to Groq
-                  │                  │
-                  │ • builds prompt  │
-                  │ • calls Groq API │
-                  │ • retries on 429 │
-                  │ • merges chunks  │
-                  └────────┬─────────┘
-                           │
-                  ┌────────▼─────────┐
-                  │  Groq API (free) │
-                  │  llama-3.3-70b   │
-                  └────────┬─────────┘
-                           │ JSON review
-                  ┌────────▼─────────┐
-                  │   reporter.py    │  ← formats output
-                  └──┬────────────┬──┘
-                     │            │
-              Terminal /       .md file /
-              stdout         pr_review_*.md
+                    └───────┬────────┘
+                            │
+                    ┌───────▼────────┐
+                    │github_client.py│  ← step 1: fetch
+                    │ • get PR meta  │
+                    │ • get files    │
+                    │ • get raw diff │
+                    └───────┬────────┘
+                            │ HTTPS request
+                    ┌───────▼────────┐
+                    │  GitHub API    │  ← free, no cost
+                    │  (REST v3)     │
+                    └───────┬────────┘
+                            │ diff + files + metadata
+                    ┌───────▼────────┐
+                    │  pr_parser.py  │  ← step 2: process
+                    │ • filter files │
+                    │ • chunk diff   │
+                    │ • build context│
+                    └───────┬────────┘
+                            │ structured dict
+                    ┌───────▼────────┐
+                    │ ai_reviewer.py │  ← step 3: review
+                    │ • build prompt │
+                    │ • call Groq    │
+                    │ • retry on 429 │
+                    │ • merge chunks │
+                    └───────┬────────┘
+                            │ HTTPS request
+                    ┌───────▼────────┐
+                    │  Groq API      │  ← free, llama-3.3-70b
+                    └───────┬────────┘
+                            │ JSON review
+                    ┌───────▼────────┐
+                    │  reporter.py   │  ← step 4: format
+                    └──┬──────────┬──┘
+                       │          │
+                  Terminal      .md file
+                  (stdout)   pr_review_*.md
                                   │
-                        (optional) GitHub comment
+                        (optional) GitHub PR comment
                         via --post-comment flag
 ```
 
