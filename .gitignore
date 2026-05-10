@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+pr_review_*.md
+pr_review_*.json
