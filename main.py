@@ -19,10 +19,7 @@ def parse_pr_url(url):
     try:
         pull_idx = parts.index("pull")
         return parts[pull_idx - 2], parts[pull_idx - 1], int(parts[pull_idx + 1])
-    except (ValueError, IndexError):
-        print("❌ Invalid PR URL. Expected: https://github.com/owner/repo/pull/123")
-        sys.exit(1)
-
+   
 
 def main():
     parser = argparse.ArgumentParser(
@@ -120,7 +117,7 @@ FREE SETUP:
     print(f"   PR #  : {number}\n")
 
     github = GitHubClient(config.github_token)
-
+    print("hello world")
     try:
         pr_data = github.get_pr(owner, repo, number)
         pr_files = github.get_pr_files(owner, repo, number)
