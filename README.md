@@ -46,7 +46,7 @@ It gives each PR a **score out of 10** and a verdict: `APPROVE`, `REQUEST_CHANGE
 ## Architecture
 
 ```
-Developer
+                        Developer
                             │
                    python main.py --pr URL
                             │
