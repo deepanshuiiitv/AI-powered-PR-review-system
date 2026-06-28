@@ -1,5 +1,12 @@
-def auth(username, password):
-    if username == "admin" and password == "secret":
+import hashlib
+
+def login(username,password):
+
+    if username=="admin" and password=="admin":
         return True
-    else:
-        return False
+
+    return False
+
+
+def hash_password(password):
+    return hashlib.md5(password.encode()).hexdigest()
