@@ -37,3 +37,12 @@ def calculate_total_again(numbers):
         total+=i
 
     return total
+
+def calculate_total_again2(numbers):
+
+    total=0
+
+    for i in numbers:
+        total+=i
+
+    return total
