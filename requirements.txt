@@ -5,4 +5,5 @@ langgraph
 langchain
 langchain-core
 langchain-community
- 
+langsmith
+langchain-groq

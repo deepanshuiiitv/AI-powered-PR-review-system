@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import Config
 from src.state import ReviewState
 from src.workflow import ReviewAgentWorkflow
+from src.github_client import GitHubClient
 
 
 def parse_pr_url(url: str) -> tuple:
@@ -38,15 +39,14 @@ def parse_pr_url(url: str) -> tuple:
     parts = url.rstrip('/').split('/')
     try:
         pr_number = int(parts[-1])
-        repo = parts[-2]
-        # Handle both "pull" and "pulls"
-        owner = parts[-4] if parts[-3] in ['pull', 'pulls'] else None
+        # parts[-2] = 'pull'/'pulls', parts[-3] = repo, parts[-4] = owner
+        owner = parts[-4] if parts[-2] in ['pull', 'pulls'] else None
+        repo = parts[-3]
         if not owner:
             raise ValueError
         return owner, repo, pr_number
     except (ValueError, IndexError):
         raise ValueError(f"Invalid PR URL: {url}")
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -186,11 +186,23 @@ Examples:
                     f.write(report)
                 print(f"\n✅ Report saved to: {filename}")
             
-            if args.post_comment and config.github_token:
-                print("\n→ Posting comment to GitHub...")
-                # This would require importing github_client
-                # For now, just indicate it would be posted
-                print("   (Post-comment feature requires github_client integration)")
+            if args.post_comment:
+                if not config.github_token:
+                    print("\n⚠️  --post-comment requires GITHUB_TOKEN in .env (skipping)")
+                else:
+                    print("\n→ Posting comment to GitHub...")
+                    try:
+                        client = GitHubClient(config.github_token)
+                        client.post_comment(
+                            owner=owner,
+                            repo=repo,
+                            number=pr_number,
+                            body=final_state.formatted_report,
+                        )
+                        print(f"   ✓ Comment posted on PR #{pr_number}")
+                    except Exception as e:
+                        print(f"   ✗ Failed to post comment: {e}")
+
         
         print("\n✨ Review complete!")
         print("=" * 70)
