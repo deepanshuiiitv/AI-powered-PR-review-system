@@ -1,347 +1,173 @@
 # 🤖 AI-Powered PR Review System
 
-> **Zero cost. Zero setup friction. Real AI feedback on every pull request.**
->
-> Uses [Groq](https://console.groq.com) (free LLM API) + [GitHub REST API](https://docs.github.com/en/rest) (free).
-> No credit card. No paid tier. No rate-limit worries for normal usage.
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1c1c1c)](https://github.com/langchain-ai/langgraph)
+[![LLM](https://img.shields.io/badge/LLM-Groq%20(free)-orange)](https://console.groq.com)
+
+An agentic code review system that reads a GitHub pull request and gives it a real review - bugs, security issues, code quality, missing tests - using a free Groq-hosted LLM. It runs as a CLI tool you can point at any PR, or as a GitHub Action that comments automatically on every PR opened against your repo.
+
+## Why this exists
+
+Most "AI PR review" scripts are a single prompt wrapped around a diff. This one isn't. The system first **decides how much scrutiny a PR needs** before deciding what to run: a one-line typo fix gets a fast, fixed pipeline, while a PR touching auth, secrets, or hundreds of lines gets routed through an LLM planner that chooses tools dynamically, and can loop back for deeper security analysis if it finds something critical. That distinction - fixed orchestration vs. genuine planning - is the core design goal of this project.
+
+**Where it's useful:**
+- Solo developers or small teams who want a second pair of eyes on every PR without paying for a hosted review tool
+- Open source maintainers triaging contributions from unfamiliar contributors
+- Teaching / portfolio projects that want to demonstrate agentic LLM architecture (planning, conditional routing, decision loops) rather than a simple prompt-chain
 
 ---
 
 ## Table of Contents
 
-- [What It Does](#what-it-does)
+- [How It Works](#how-it-works)
+- [Features](#features)
 - [Architecture](#architecture)
-- [File Structure](#file-structure)
-- [File-by-File Explanation](#file-by-file-explanation)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
 - [Usage](#usage)
-- [CLI Reference](#cli-reference)
-- [GitHub Actions (Auto-review)](#github-actions-auto-review)
-- [Free API Limits](#free-api-limits)
-- [Troubleshooting](#troubleshooting)
-- [How the AI Review Works](#how-the-ai-review-works)
-- [Sample Output](#sample-output)
+- [GitHub Actions (Auto-Review)](#github-actions-auto-review)
+- [Configuration](#configuration)
+- [Example Output](#example-output)
+- [Limitations](#limitations)
+- [Roadmap](#roadmap)
 
 ---
 
-## What It Does
+## How It Works
 
-You give it a GitHub PR URL. It gives you back a detailed AI code review covering:
+1. **Fetch** — pull PR metadata, changed files, and the raw diff from the GitHub REST API.
+2. **Parse** — chunk the diff into LLM-safe pieces, splitting cleanly on file boundaries.
+3. **Preprocess** — classify the PR as `simple` or `complex` based on lines changed, file count, and whether security-sensitive files/keywords are touched.
+4. **Plan** — route to one of two planners:
+   - **Simple Planner**: a fixed, fast tool sequence, no LLM call.
+   - **LLM Planner**: asks Groq which tools are worth running given the PR's context.
+5. **Execute** — run the planned tools (code review, security analysis, static analysis).
+6. **Decide** — a decision node inspects the findings so far. If critical issues were found, it loops back and runs a deeper security pass. If code-quality issues were found early, it can add a static analysis pass. Otherwise it proceeds to summarize. This loop is capped (`max_iterations`) so it always terminates.
+7. **Summarize** — aggregate every finding into a single score (1–10) and a verdict: `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`.
+8. **Report** — format everything into a polished Markdown report, printed to terminal, saved to file, and/or posted as a GitHub PR comment.
 
-| Category | What It Checks |
+---
+
+## Features
+
+| Category | What it checks |
 |---|---|
-| 🚨 Critical Issues | Bugs, logic errors, null pointer risks, off-by-one |
-| 🔒 Security | SQL injection, hardcoded secrets, insecure auth, input validation |
-| ⚡ Performance | N+1 queries, blocking I/O, unnecessary loops, memory leaks |
-| 💡 Code Quality | Readability, naming, complexity, dead code, DRY violations |
-| 🧪 Test Coverage | Missing tests, weak assertions, untested edge cases |
-| 📌 Best Practices | SOLID principles, error handling, logging, documentation |
+| 🚨 Critical Issues | Hardcoded secrets, SQL injection patterns, dangerous calls (`eval`, `exec`, `pickle.loads`) |
+| 🔒 Security | LLM-driven vulnerability scan per diff chunk (SQL injection, XSS, auth issues, disabled SSL verification) |
+| 📝 Code Quality | LLM-driven review for readability, naming, logic issues, and suggestions |
+| ⚙️ Static Analysis | Regex-based checks: bare `except:`, leftover debug prints, TODO/FIXME markers, deep nesting, oversized functions |
+| 🧪 Test Coverage | Surfaced as part of the aggregated findings |
+| 👍 Positive Feedback | The model is also asked to call out things the PR does well |
 
-It gives each PR a **score out of 10** and a verdict: `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`.
+Other notable behavior:
+- **Conditional, looping workflow** — not a fixed sequential pipeline. Built on [LangGraph](https://github.com/langchain-ai/langgraph) with real conditional edges and a bounded decision loop.
+- **Dynamic tool selection** — the LLM planner picks tools based on PR risk, not a hardcoded list.
+- **Pattern-based pre-checks** — fast regex security checks run before the LLM call, so obvious issues (e.g. a hardcoded API key) are always caught even if the model misses them.
+- **Graceful degradation** — if the LLM returns malformed JSON, the relevant tool logs the failure and the workflow continues rather than crashing.
+- **LangSmith-traceable** — tool calls go through `ChatGroq` (LangChain's Groq wrapper), so if you set LangSmith env vars, every LLM call in the workflow is automatically traced.
 
 ---
 
 ## Architecture
 
-```
-                        Developer
-                            │
-                   python main.py --pr URL
-                            │
-                    ┌───────▼────────┐
-                    │   main.py      │  ← CLI entry point
-                    │  (orchestrator)│
-                    └───────┬────────┘
-                            │ loads
-                    ┌───────▼────────┐
-                    │   config.py    │  ← reads .env file
-                    └───────┬────────┘
-                            │
-                    ┌───────▼────────┐
-                    │github_client.py│  ← step 1: fetch
-                    │ • get PR meta  │
-                    │ • get files    │
-                    │ • get raw diff │
-                    └───────┬────────┘
-                            │ HTTPS request
-                    ┌───────▼────────┐
-                    │  GitHub API    │  ← free, no cost
-                    │  (REST v3)     │
-                    └───────┬────────┘
-                            │ diff + files + metadata
-                    ┌───────▼────────┐
-                    │  pr_parser.py  │  ← step 2: process
-                    │ • filter files │
-                    │ • chunk diff   │
-                    │ • build context│
-                    └───────┬────────┘
-                            │ structured dict
-                    ┌───────▼────────┐
-                    │ ai_reviewer.py │  ← step 3: review
-                    │ • build prompt │
-                    │ • call Groq    │
-                    │ • retry on 429 │
-                    │ • merge chunks │
-                    └───────┬────────┘
-                            │ HTTPS request
-                    ┌───────▼────────┐
-                    │  Groq API      │  ← free, llama-3.3-70b
-                    └───────┬────────┘
-                            │ JSON review
-                    ┌───────▼────────┐
-                    │  reporter.py   │  ← step 4: format
-                    └──┬──────────┬──┘
-                       │          │
-                  Terminal      .md file
-                  (stdout)   pr_review_*.md
-                                  │
-                        (optional) GitHub PR comment
-                        via --post-comment flag
-```
+![Architecture](assets/architecture.jpeg)
 
-### Data Flow Summary
-
-1. **CLI** parses the PR URL and extracts `owner`, `repo`, `number`
-2. **GitHubClient** fetches PR metadata, file list, and raw unified diff via GitHub REST API
-3. **PRParser** filters out auto-generated/lock files, splits large diffs into token-safe chunks, and assembles a structured dict
-4. **AIReviewer** sends each chunk to Groq with a detailed system prompt, handles rate limits with exponential backoff, and merges multi-chunk results
-5. **Reporter** formats the JSON review into a polished Markdown report with score bars, verdict badges, and a stats table
-6. Output goes to terminal, a `.md` file, or back to GitHub as a PR comment
+State is carried through every node as a single `ReviewState` dataclass (`src/state.py`), which tracks the PR data, findings collected so far, loop iteration count, and the final score/verdict/report.
 
 ---
 
-## File Structure
+## Project Structure
 
 ```
 ai-pr-reviewer/
 │
-├── main.py                  # CLI entry point — run this
-├── config.py                # Loads .env, validates required keys
-├── requirements.txt         # Only 2 dependencies
-├── .env.example             # Template — copy to .env and fill in
-├── .gitignore
+├── main.py                          # CLI entry point
+├── config.py                        # Loads & validates .env
+├── requirements.txt
+├── .env.example
 │
 ├── src/
-│   ├── __init__.py
-│   ├── github_client.py     # All GitHub REST API calls
-│   ├── pr_parser.py         # Diff parsing, chunking, file filtering
-│   ├── ai_reviewer.py       # Groq API integration + review logic
-│   └── reporter.py          # Formats JSON review into Markdown
+│   ├── state.py                     # ReviewState — shared state across the graph
+│   ├── workflow.py                  # LangGraph graph definition (nodes + edges)
+│   ├── github_client.py             # GitHub REST API wrapper
+│   ├── reporter.py                  # Formats final review into Markdown
+│   │
+│   ├── agents/
+│   │   ├── preprocessing_agent.py   # Classifies PR as simple/complex
+│   │   ├── simple_planner.py        # Fixed tool plan (no LLM call)
+│   │   └── llm_planner.py           # Groq-driven dynamic tool plan
+│   │
+│   └── tools/
+│       ├── fetch_pr_tool.py         # Wraps GitHubClient for the graph
+│       ├── parse_diff_tool.py       # Chunks the raw diff
+│       ├── code_review_tool.py      # LLM code quality review
+│       ├── security_analysis_tool.py# Pattern checks + LLM security review
+│       ├── static_analysis_tool.py  # Regex-based static checks
+│       └── summarizer_tool.py       # Aggregates findings into score/verdict
 │
 └── .github/
     └── workflows/
-        └── pr-review.yml    # GitHub Actions — auto-review on PR open
+        └── pr-review.yml            # GitHub Actions — auto-review on PR open
 ```
 
 ---
 
-## File-by-File Explanation
+## Getting Started
 
-### `main.py` — Orchestrator & CLI
+### Prerequisites
 
-The entry point. Uses Python's `argparse` to build a user-friendly CLI.
+- Python 3.11+ (matches the version used in CI; 3.9+ should also work)
+- A free [Groq API key](https://console.groq.com) — no credit card required
+- A [GitHub Personal Access Token](https://github.com/settings/tokens) — only required for private repos or posting comments
 
-**Responsibilities:**
-- Accepts `--pr URL` or `--owner / --repo / --number` flags
-- Parses the GitHub PR URL to extract owner, repo, and PR number
-- Calls each module in sequence: GitHub → Parser → AI → Reporter
-- Routes output to terminal, file, or GitHub comment based on flags
-- Prints colored status updates as each step completes
-
-**Key functions:**
-- `parse_pr_url(url)` — splits a GitHub URL into its parts
-- `main()` — top-level orchestration; the only function that calls all others
-
----
-
-### `config.py` — Configuration Loader
-
-Loads environment variables from your `.env` file using `python-dotenv`.
-
-**Responsibilities:**
-- Reads `GROQ_API_KEY` and `GITHUB_TOKEN` from `.env`
-- Raises a clear error if the required Groq key is missing
-- GitHub token is optional (only needed for private repos or `--post-comment`)
-
-```python
-# What it does internally:
-load_dotenv()                        # reads .env into os.environ
-self.groq_api_key = os.getenv(...)   # pulls the key
-if not self.groq_api_key: raise ...  # gives a helpful error message
-```
-
----
-
-### `src/github_client.py` — GitHub API Client
-
-Handles all communication with the [GitHub REST API v3](https://docs.github.com/en/rest).
-
-**Responsibilities:**
-- Fetches PR metadata (title, author, branch names, labels, draft status)
-- Fetches the list of changed files with per-file stats
-- Fetches the raw unified diff (the actual code changes)
-- Posts a comment back to the PR (when `--post-comment` is used)
-- Paginates file lists automatically (handles PRs with 100+ files)
-
-**Endpoints used:**
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/repos/{owner}/{repo}/pulls/{number}` | PR metadata |
-| GET | `/repos/{owner}/{repo}/pulls/{number}/files` | Changed files |
-| GET | `/repos/{owner}/{repo}/pulls/{number}` (diff header) | Raw diff |
-| POST | `/repos/{owner}/{repo}/issues/{number}/comments` | Post review |
-
-**Authentication:** Adds `Authorization: Bearer TOKEN` header when `GITHUB_TOKEN` is set. Public repos work without any token.
-
----
-
-### `src/pr_parser.py` — Diff Parser & Chunker
-
-Transforms raw GitHub API responses into a clean, structured dict ready for the AI.
-
-**Responsibilities:**
-- **Filters out noise:** skips lock files (`package-lock.json`, `yarn.lock`, `poetry.lock`), minified files (`.min.js`), source maps (`.map`), and other auto-generated content
-- **Chunks large diffs:** splits diffs larger than 12,000 characters into smaller pieces that fit within the LLM's token limit. Always breaks on file boundaries (`diff --git` lines) so each chunk contains complete files
-- **Builds context header:** assembles a summary of PR title, author, branch, description, and file stats that gets sent with every AI call
-
-**Key constants:**
-```python
-CHUNK_SIZE = 12_000      # characters per chunk (~3k tokens safety margin)
-REVIEWABLE_EXTENSIONS    # set of file types worth reviewing
-SKIP_PATTERNS            # regex for lock/generated files to skip
-```
-
----
-
-### `src/ai_reviewer.py` — AI Review Engine
-
-The core intelligence of the system. Sends the PR to Groq's free LLM API and gets back a structured JSON review.
-
-**Responsibilities:**
-- Constructs a detailed system prompt defining the review dimensions
-- Sends each diff chunk to Groq with the full PR context header
-- Handles rate limiting with automatic retry (waits 30s on HTTP 429)
-- Safely parses JSON responses (handles accidental markdown fences)
-- Merges multi-chunk reviews into a single coherent result using a pessimistic merge strategy for verdicts (if any chunk says `REQUEST_CHANGES`, the final verdict is `REQUEST_CHANGES`)
-
-**System prompt covers:**
-1. Code quality (readability, naming, complexity)
-2. Correctness (bugs, edge cases, logic errors)
-3. Security (injection, secrets, auth bypass)
-4. Performance (N+1, blocking I/O, memory)
-5. Best practices (SOLID, DRY, error handling)
-6. Tests (missing coverage, weak assertions)
-7. Documentation (missing docstrings, misleading comments)
-
-**Groq model used:** `llama-3.3-70b-versatile` (default)
-- Context window: 128k tokens
-- Speed: ~400 tokens/second
-- Cost: **free**
-
-**Response format:** Forces JSON output via `response_format: {"type": "json_object"}` so the response is always parseable.
-
----
-
-### `src/reporter.py` — Output Formatter
-
-Takes the raw AI review dict and formats it into a polished, human-readable Markdown document.
-
-**Responsibilities:**
-- Renders a verdict badge (`🟢 APPROVE`, `🔴 REQUEST CHANGES`, `🟡 COMMENT`)
-- Renders a visual score bar using block characters (`████████░░`)
-- Sections: Summary → Critical Issues → Security → Improvements → Missing Tests → Positives → Recommendations → Stats table
-- Caps improvement suggestions at 15 to keep the report readable
-- Embeds a link back to the original PR
-
-**Output example:**
-```markdown
-# 🤖 AI Code Review
-
-## 🔴 REQUEST CHANGES
-
-**Quality Score:** 6/10  `██████░░░░`
-
-### 📋 Summary
-The PR fixes the bug but introduces a SQL injection risk...
-
-### 🚨 Critical Issues (1)
-### 1. `auth.py`
-❗ Issue: Raw string formatting in SQL query
-✅ Fix: Use parameterized queries
-```
-
----
-
-### `.github/workflows/pr-review.yml` — GitHub Actions
-
-Runs the reviewer automatically whenever a PR is opened, updated, or reopened in your repository.
-
-**Trigger:** `pull_request` events (`opened`, `synchronize`, `reopened`)
-
-**Steps:**
-1. Check out the repo
-2. Set up Python 3.11
-3. Install the two dependencies
-4. Run `main.py` with `--post-comment` to post the review as a GitHub comment
-5. Upload the `.md` review file as a build artifact
-
-**Required secrets** (add in repo Settings → Secrets → Actions):
-- `GROQ_API_KEY` — your free Groq key
-- `GITHUB_TOKEN` — automatically provided by GitHub Actions (no setup needed)
-
----
-
-## Prerequisites
-
-- Python 3.8 or higher
-- A free [Groq API key](https://console.groq.com) (takes 1 minute, no credit card)
-- A [GitHub Personal Access Token](https://github.com/settings/tokens) (only needed for private repos or posting comments)
-
----
-
-## Installation
+### Installation
 
 ```bash
-# 1. Get the code
-git clone https://github.com/username/repo.git
-cd repo
+git clone https://github.com/deepanshuiiitv/AI-powered-PR-review-system.git
+cd AI-powered-PR-review-system
 
-# 2. Create a virtual environment (recommended)
 python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
-# 3. Activate it
-source venv/bin/activate        # Linux / macOS
-venv\Scripts\activate           # Windows
-
-# 4. Install dependencies
 pip install -r requirements.txt
-
-# 5. Set up environment variables
-cp .env.example .env
-# Now edit .env and add your keys (see Configuration below)
 ```
 
----
+### Environment Variables
 
-## Configuration
+Copy the example file and fill in your keys:
 
-Open your `.env` file and fill in your keys:
+```bash
+cp .env.example .env
+```
 
 ```env
-# Required — get free at https://console.groq.com
+# Required
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Optional — needed for private repos or --post-comment
-# Get at https://github.com/settings/tokens
-# Scopes: repo (private) or public_repo + write:discussion (comments)
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-**Verify your setup:**
+Verify it loaded correctly:
+
 ```bash
 python -c "from config import Config; c = Config(); print('✅ Key loaded:', c.groq_api_key[:8] + '...')"
+```
+
+### Dependencies
+
+Installed via `requirements.txt`:
+
+```
+python-dotenv
+requests
+groq
+langgraph
+langchain
+langchain-core
+langchain-community
+langsmith
+langchain-groq
 ```
 
 ---
@@ -351,56 +177,36 @@ python -c "from config import Config; c = Config(); print('✅ Key loaded:', c.g
 ### Quickstart
 
 ```bash
-# Simplest — just paste any GitHub PR URL
 python main.py --pr https://github.com/owner/repo/pull/42
 ```
 
+### Owner / repo / number syntax
 
-### Save to file
+```bash
+python main.py --owner owner --repo repo --number 42
+```
+
+### Save the report to a file
 
 ```bash
 python main.py --pr https://github.com/owner/repo/pull/42 --output file
 # Saves to: pr_review_owner_repo_42.md
 ```
 
-### Post review as GitHub comment
+### Print and save
+
+```bash
+python main.py --pr https://github.com/owner/repo/pull/42 --output both
+```
+
+### Post the review as a GitHub PR comment
 
 ```bash
 python main.py --pr https://github.com/owner/repo/pull/42 --post-comment
 # Requires GITHUB_TOKEN in .env
 ```
 
-### Print AND save
-
-```bash
-python main.py --pr https://github.com/owner/repo/pull/42 --output both
-```
-
-### Use a different Groq model
-
-```bash
-# Larger context window (good for big PRs)
-python main.py --pr https://github.com/owner/repo/pull/42 --model mixtral-8x7b-32768
-
-# Faster, lighter model
-python main.py --pr https://github.com/owner/repo/pull/42 --model llama-3.1-8b-instant
-```
-
-### Output raw JSON
-
-```bash
-python main.py --pr https://github.com/owner/repo/pull/42 --format json
-```
-
-### Without a full URL
-
-```bash
-python main.py --owner facebook --repo react --number 123
-```
-
----
-
-## CLI Reference
+### CLI Reference
 
 ```
 usage: main.py [-h] (--pr URL | --owner OWNER) [--repo REPO] [--number N]
@@ -414,198 +220,123 @@ Options:
   --number N            PR number
   --model MODEL         Groq model to use (default: llama-3.3-70b-versatile)
   --output              terminal | file | both (default: terminal)
-  --format              markdown | json (default: markdown)
+  --format               markdown | json (default: markdown)
   --post-comment        Post the review as a GitHub PR comment
   --no-color            Disable colored terminal output
 ```
 
----
-
-## GitHub Actions (Auto-review)
-
-To automatically get AI reviews on every PR in your repo:
-
-**Step 1:** Copy `.github/workflows/pr-review.yml` into your repository.
-
-**Step 2:** Add your Groq key as a repository secret:
-- Go to your repo → **Settings** → **Secrets and variables** → **Actions**
-- Click **New repository secret**
-- Name: `GROQ_API_KEY`, Value: your key starting with `gsk_`
-
-> `GITHUB_TOKEN` is automatically provided by GitHub Actions — you don't need to add it.
-
-**Step 3:** Open any pull request. The bot will post a review comment automatically within ~30 seconds.
+> **Note:** `--model` and `--format` are accepted by the CLI for forward compatibility but the workflow currently calls Groq with a fixed model (`llama-3.3-70b-versatile`) inside each tool. If you need a different model, update the `ChatGroq(model=...)` calls in `src/tools/code_review_tool.py`, `src/tools/security_analysis_tool.py`, and `src/agents/llm_planner.py`.
 
 ---
 
-## Free API Limits
+## GitHub Actions (Auto-Review)
 
-### Groq (LLM)
-| Limit | Value |
-|---|---|
-| Requests per day | 14,400 |
-| Requests per minute | 30 |
-| Tokens per minute | 6,000 (llama-3.3-70b) |
-| Cost | **$0** |
+The workflow at `.github/workflows/pr-review.yml` runs the reviewer automatically on every `opened`, `synchronize`, or `reopened` pull request event.
 
-For a team of 5 developers opening 10 PRs/day, that's well within the free tier.
+**Setup:**
 
-### GitHub API
-| Limit | Value |
-|---|---|
-| Unauthenticated | 60 requests/hour |
-| Authenticated (free token) | 5,000 requests/hour |
-| Cost | **$0** |
-
-This tool makes 3 API calls per review. You can review ~1,600 PRs/hour with a free token.
+1. Add `GROQ_API_KEY` as a repository secret: **Settings → Secrets and variables → Actions → New repository secret**.
+2. `GITHUB_TOKEN` is provided automatically by GitHub Actions — no setup needed.
+3. Open a PR. The bot posts a review comment and uploads the Markdown report as a build artifact.
 
 ---
 
-## Troubleshooting
+## Configuration
 
-### `❌ GitHub API error: 404 Not Found`
-- Make sure your URL has **no `.git`** at the end
-  - ❌ `https://github.com/user/repo.git/pull/1`
-  - ✅ `https://github.com/user/repo/pull/1`
-- For private repos, ensure `GITHUB_TOKEN` is set in `.env`
+| Variable | Required | Purpose |
+|---|---|---|
+| `GROQ_API_KEY` | ✅ | Auth for all LLM calls (planning, code review, security analysis) |
+| `GITHUB_TOKEN` | Optional | Needed for private repos and `--post-comment` |
 
-### `❌ Groq API error: 401 Unauthorized`
-- Your `GROQ_API_KEY` is missing or wrong in `.env`
-- Run `cat .env` to verify the key is there
-- Ensure there are no spaces around the `=` sign
+**LLM model:** `llama-3.3-70b-versatile` via Groq, called through `langchain_groq.ChatGroq` in every LLM-backed node (planner, code review, security analysis). Using the LangChain wrapper means calls are automatically traced if you have LangSmith environment variables configured.
 
-### `error: externally-managed-environment`
-- Don't install packages into the system Python. Use a virtual environment:
-  ```bash
-  python3 -m venv venv && source venv/bin/activate
-  pip install -r requirements.txt
-  ```
-
-### `ModuleNotFoundError: No module named 'dotenv'`
-- Your virtual environment isn't activated. Run: `source venv/bin/activate`
-
-### AI returns an unparseable response
-- This is rare. The tool will fall back gracefully and show a partial review.
-- Try a different model: `--model llama-3.1-8b-instant`
-
-### Very large PRs (1000+ line diffs)
-- The tool auto-chunks large diffs and reviews each part separately
-- It takes a bit longer but works correctly
-- Consider using `--model mixtral-8x7b-32768` for its larger context window
+**Decision loop bounds:** `ReviewState.max_iterations` (default `3`) caps how many times the `tool_executor` → `decision` loop can run, guaranteeing termination even if findings keep triggering re-analysis.
 
 ---
 
-## How the AI Review Works
-
-The system sends this information to the AI for each review:
-
-```gh pr create --base {base branch} --head {head branch}```
+## Example Output
 
 ```
-PR TITLE:    Fix SQL injection in login endpoint
-AUTHOR:      devuser
-BRANCH:      fix/sql-injection → main
-LABELS:      security, bug
+======================================================================
+🤖 AI-POWERED PR REVIEW SYSTEM (Agentic Architecture)
+======================================================================
 
-DESCRIPTION:
-Replaces string concatenation in SQL queries with parameterized queries.
+📍 PR: deepanshuiiitv/AI-powered-PR-review-system#7
+🔗 URL: https://github.com/deepanshuiiitv/AI-powered-PR-review-system/pull/7
 
-STATS: 3 files reviewed  +47 / -12 lines
+→ Initializing agentic workflow...
+→ Starting agent loop...
+======================================================================
+  [Preprocessing] COMPLEX PR detected
+    • Changes: 140 LOC, 3 files
+    • Risk level: high
+    • Files to focus: testing purpose/auth.py, testing purpose/database.py
 
-FILES CHANGED:
-  [modified ] src/auth.py    (+35/-10)
-  [modified ] tests/test_auth.py  (+12/-2)
-  [unchanged] README.md
+  [LLM Planner] Groq decided: security_analysis → code_review → summarizer
 
-DIFF:
-[full unified diff here]
-```
+→ Tool Execution [Iteration 1]
+  Running: security_analysis
+    ✓ Analyzed 1 chunk(s)
+      - Critical: 2, Security: 1
+  Running: code_review
+    ✓ Reviewed 1 chunk(s), found 4 issues
+  Running: summarizer
+    ✓ Score: 3.0/10
+    ✓ Verdict: REQUEST_CHANGES
 
-The AI is instructed to return structured JSON with all review categories. The system prompt defines exact scoring rubrics and verdict criteria to ensure consistent, actionable output.
+→ Agent Decision: Critical issues found, running deeper security
 
----
+→ Tool Execution [Iteration 2]
+  Running: security_analysis
+    ✓ Analyzed 1 chunk(s)
 
-## Sample Output
+→ Agent Decision: Enough analysis done, moving to summarize
 
-```
-── Fetching PR data from GitHub ...
-   Repo  : deepanshuiiitv/AI-powered-PR-review-system
-   PR #  : 1
+→ Formatting report...
+  ✓ Report formatted
+======================================================================
 
-   Title : Add initial project structure
-   Author: deepanshuiiitv
-   Files : 6 changed
-
-── Running AI review with llama-3.3-70b-versatile ...
-   Sending diff to Groq...
-
-════════════════════════════════════════════════════
 # 🤖 AI Code Review
 
-> Generated: 2026-05-10 10:30 UTC
-> PR: Add initial project structure
+## 🔴 REQUEST CHANGES
 
----
-
-## 🟡 COMMENT
-
-**Quality Score:** 7/10  `███████░░░`
+**Quality Score:** 3/10  `███░░░░░░░`
 
 ### 📋 Summary
-The project structure is well-organised with clear separation of concerns.
-The GitHub client and parser modules are clean. Consider adding error
-handling for network timeouts and input validation on the PR URL parser.
+Found 2 critical issue(s) that must be fixed before merging.
 
 ---
 
-## 💡 Suggested Improvements (3)
+## 🚨 Critical Issues (2)
 
-- **`src/ai_reviewer.py`** — No timeout on requests.post
-  → Add `timeout=60` to prevent indefinite hangs
+### 1. `testing purpose/database.py`
+❗ Issue: SQL query built via string concatenation
+✅ Fix: Use parameterized queries
 
-- **`src/github_client.py`** — No retry on 5xx server errors
-  → Wrap _get() with a retry decorator for transient failures
-
-- **`main.py`** — PR number not validated as positive integer
-  → Add: `if number <= 0: raise ValueError`
-
----
-
-## 🧪 Missing Test Coverage (2)
-
-- Unit tests for PRParser.chunk_diff with diff > CHUNK_SIZE
-- Test for Reporter.format when review has empty critical_issues
-
----
-
-## 👍 Positive Aspects
-
-- Clear module boundaries — each file has a single responsibility
-- Graceful fallback in _safe_parse() for malformed JSON responses
-- Auto-pagination in get_pr_files() handles large PRs correctly
-
----
-
-## 📌 General Recommendations
-
-- Add a --dry-run flag to preview what will be sent to the API
-- Consider caching GitHub responses to speed up re-runs on the same PR
-
----
-
-## 📊 PR Statistics
-
-| Metric         | Value |
-|----------------|-------|
-| Files changed  | 6     |
-| Files reviewed | 6     |
-| Lines added    | +312  |
-| Lines removed  | -0    |
-
-════════════════════════════════════════════════════
-
-  🟡 Verdict : COMMENT
-  📊 Score   : 7/10
+### 2. `testing purpose/auth.py`
+❗ Issue: Passwords hashed with MD5, hardcoded credential check
+✅ Fix: Use a salted hash (bcrypt/argon2) and remove the hardcoded admin check
 
 ✨ Review complete!
 ```
+
+---
+
+## Limitations
+
+- **Diff-only context** — the model reviews diff chunks, not the full file or repo, so it can miss issues that only make sense with broader context.
+- **LLM JSON parsing isn't bulletproof** — malformed model output is caught and logged as an error rather than crashing the run, but that chunk's findings are lost.
+- **Fixed model per tool** — the `--model` CLI flag is accepted but not yet wired through to the LangChain calls.
+- **No persistent memory** — every run starts fresh; there's no learning from past reviews on the same repo.
+- **Groq free-tier rate limits** apply (see [console.groq.com](https://console.groq.com) for current limits) — large PRs with many chunks will make multiple sequential calls.
+
+## Roadmap
+
+- [ ] Wire `--model` through to all `ChatGroq` calls
+- [ ] Add `--format json` output support to the reporter
+- [ ] Inline PR review comments (per-line) instead of a single issue comment
+- [ ] Configurable decision-loop strategy (currently hardcoded in `node_decision`)
+- [ ] Unit tests for the chunking logic in `parse_diff_tool.py` and the scoring logic in `summarizer_tool.py`
+- [ ] Optional caching of GitHub API responses for repeat runs on the same PR
+
+---
