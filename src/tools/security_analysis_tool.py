@@ -1,7 +1,3 @@
-"""
-Security Analysis Tool: Uses ChatGroq for automatic LangSmith tracing.
-"""
-
 import re
 import json
 from langchain_groq import ChatGroq
@@ -12,7 +8,7 @@ def security_analysis_tool(state: ReviewState, groq_api_key: str) -> ReviewState
     print("  [Tool] Running security analysis...")
 
     if not state.parsed_diff_chunks:
-        print("    ✓ No chunks to analyze")
+        print("    No chunks to analyze")
         return state
 
     # Phase 1: Pattern-based checks (fast, no LLM, won't show in LangSmith)
@@ -34,20 +30,20 @@ def security_analysis_tool(state: ReviewState, groq_api_key: str) -> ReviewState
 
             security_prompt = f"""Analyze this code diff for security vulnerabilities.
 
-DIFF:
-```
-{chunk[:3000]}
-```
+                                DIFF:
+                                ```
+                                {chunk[:3000]}
+                                ```
 
-Return JSON only (no markdown fences):
-{{
-    "vulnerabilities": [
-        {{"type": "SQL_INJECTION/XSS/AUTH/etc", "file": "...", "risk": "critical/high/medium", "description": "...", "remediation": "..."}}
-    ]
-}}
+                                Return JSON only (no markdown fences):
+                                {{
+                                    "vulnerabilities": [
+                                        {{"type": "SQL_INJECTION/XSS/AUTH/etc", "file": "...", "risk": "critical/high/medium", "description": "...", "remediation": "..."}}
+                                    ]
+                                }}
 
-If no vulnerabilities found, return: {{"vulnerabilities": []}}
-"""
+                                If no vulnerabilities found, return: {{"vulnerabilities": []}}
+                                """
             response = llm.invoke(security_prompt)
             response_text = response.content.strip()
             response_text = response_text.replace("```json", "").replace("```", "").strip()
@@ -69,11 +65,11 @@ If no vulnerabilities found, return: {{"vulnerabilities": []}}
             except json.JSONDecodeError:
                 state.add_error(f"Failed to parse security review for chunk {i}")
 
-        print(f"    ✓ Analyzed {len(state.parsed_diff_chunks)} chunk(s)")
+        print(f"    Analyzed {len(state.parsed_diff_chunks)} chunk(s)")
         print(f"      - Critical: {len(state.critical_issues)}, Security: {len(state.security_issues)}")
 
     except Exception as e:
-        print(f"    ✗ Security analysis error: {e}")
+        print(f"    Security analysis error: {e}")
         state.add_error(f"Security analysis error: {e}")
 
     return state

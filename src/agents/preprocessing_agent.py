@@ -87,9 +87,9 @@ def analyze_pr_complexity(state: ReviewState) -> ReviewState:
     # Logging
     complexity_type = "COMPLEX" if is_complex else "SIMPLE"
     print(f"  [Preprocessing] {complexity_type} PR detected")
-    print(f"    • Changes: {total_changes} LOC, {files_changed} files")
-    print(f"    • Risk level: {risk_level}")
+    print(f"    -Changes: {total_changes} LOC, {files_changed} files")
+    print(f"    -Risk level: {risk_level}")
     if analysis_hints:
-        print(f"    • Files to focus: {', '.join(analysis_hints)}")
+        print(f"    -Files to focus: {', '.join(analysis_hints)}")
     
     return state

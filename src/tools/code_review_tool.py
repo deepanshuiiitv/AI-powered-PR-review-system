@@ -1,7 +1,3 @@
-"""
-Code Review Tool: Uses ChatGroq for automatic LangSmith tracing.
-"""
-
 import json
 from langchain_groq import ChatGroq
 from src.state import ReviewState
@@ -11,7 +7,7 @@ def code_review_tool(state: ReviewState, groq_api_key: str) -> ReviewState:
     print("  [Tool] Running AI code review...")
 
     if not state.parsed_diff_chunks:
-        print("    ✓ No chunks to review")
+        print("    No chunks to review")
         return state
 
     llm = ChatGroq(
@@ -32,18 +28,18 @@ def code_review_tool(state: ReviewState, groq_api_key: str) -> ReviewState:
 
             review_prompt = f"""Review this code diff for quality issues.
 
-DIFF:
-```
-{chunk[:3000]}
-```
+                                DIFF:
+                                ```
+                                {chunk[:3000]}
+                                ```
 
-Return JSON only (no markdown fences):
-{{
-    "issues": [{{"file": "...", "issue": "...", "severity": "low/medium/high", "suggestion": "..."}}],
-    "positives": ["..."],
-    "recommendations": [{{"area": "...", "suggestion": "..."}}]
-}}
-"""
+                                Return JSON only (no markdown fences):
+                                {{
+                                    "issues": [{{"file": "...", "issue": "...", "severity": "low/medium/high", "suggestion": "..."}}],
+                                    "positives": ["..."],
+                                    "recommendations": [{{"area": "...", "suggestion": "..."}}]
+                                }}
+                                """
             response = llm.invoke(review_prompt)
             response_text = response.content.strip()
             response_text = response_text.replace("```json", "").replace("```", "").strip()
@@ -60,10 +56,10 @@ Return JSON only (no markdown fences):
         state.positive_aspects.extend(list(set(all_positives))[:5])
         state.recommendations.extend(all_recommendations[:5])
 
-        print(f"    ✓ Reviewed {len(state.parsed_diff_chunks)} chunk(s), found {len(all_issues)} issues")
+        print(f"    Reviewed {len(state.parsed_diff_chunks)} chunk(s), found {len(all_issues)} issues")
 
     except Exception as e:
-        print(f"    ✗ Code review error: {e}")
+        print(f"    Code review error: {e}")
         state.add_error(f"Code review error: {e}")
 
     return state

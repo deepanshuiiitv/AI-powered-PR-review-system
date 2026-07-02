@@ -45,7 +45,7 @@ class ReviewAgentWorkflow:
             return llm_plan_tools(state, self.groq_api_key)
 
         def node_tool_executor(state: ReviewState):
-            print(f"\n→ Tool Execution [Iteration {state.loop_iteration + 1}]")
+            print(f"\n->  Tool Execution [Iteration {state.loop_iteration + 1}]")
             state.loop_iteration += 1
 
             for tool_name in state.planned_tools:
@@ -62,14 +62,13 @@ class ReviewAgentWorkflow:
             return state
 
         def node_decision(state: ReviewState):
-            # ✅ Must return STATE (not string) in LangGraph
             if state.loop_iteration >= state.max_iterations:
-                print("\n→ Agent Decision: Max iterations reached, moving to summarize")
+                print("\n->  Agent Decision: Max iterations reached, moving to summarize")
                 state.needs_more_analysis = False
                 return state
 
             if len(state.critical_issues) > 0 and not state.deep_security_done:
-                print("\n→ Agent Decision: Critical issues found, running deeper security")
+                print("\n->  Agent Decision: Critical issues found, running deeper security")
                 state.planned_tools = ["security_analysis"]
                 state.deep_security_done = True
                 state.needs_more_analysis = True
@@ -78,12 +77,12 @@ class ReviewAgentWorkflow:
             if len(state.code_quality_issues) > 0 and state.loop_iteration < 2:
                 already_ran = any("static" in t for t in state.planned_tools)
                 if not already_ran:
-                    print("\n→ Agent Decision: Code issues found, running static analysis")
+                    print("\n->  Agent Decision: Code issues found, running static analysis")
                     state.planned_tools = ["static_analysis"]
                     state.needs_more_analysis = True
                     return state
 
-            print("\n→ Agent Decision: Enough analysis done, moving to summarize")
+            print("\n-> Agent Decision: Enough analysis done, moving to summarize")
             state.needs_more_analysis = False
             return state
 
@@ -93,12 +92,11 @@ class ReviewAgentWorkflow:
             return state
 
         def node_reporter(state: ReviewState):
-            print("\n→ Formatting report...")
+            print("\n->  Formatting report...")
             try:
                 from src.reporter import Reporter
                 reporter = Reporter()
 
-                # ✅ FIX: Try different method names since format_review may not exist
                 report = None
                 if hasattr(reporter, 'format_review'):
                     report = reporter.format_review(
@@ -145,10 +143,10 @@ class ReviewAgentWorkflow:
                     report = _build_fallback_report(state)
 
                 state.formatted_report = report
-                print("  ✓ Report formatted")
+                print("  Report formatted")
 
             except Exception as e:
-                print(f"  ✗ Reporter error: {e}")
+                print(f"  Reporter error: {e}")
                 state.formatted_report = _build_fallback_report(state)
                 state.add_error(f"Reporter error: {e}")
 
@@ -182,7 +180,7 @@ class ReviewAgentWorkflow:
         workflow.add_edge("llm_planner", "tool_executor")
         workflow.add_edge("tool_executor", "decision")
 
-        # ✅ Routing function for decision (separate from node)
+        #  Routing function for decision (separate from node)
         def route_after_decision(state: ReviewState) -> str:
             return "tool_executor" if state.needs_more_analysis else "summarizer"
 
@@ -199,7 +197,7 @@ class ReviewAgentWorkflow:
     def run(self, state: ReviewState) -> ReviewState:
         result = self.graph.invoke(state)
 
-        # ✅ FIX: LangGraph returns dict, convert back to ReviewState
+        #  FIX: LangGraph returns dict, convert back to ReviewState
         if isinstance(result, dict):
             final_state = ReviewState()
             for key, value in result.items():
@@ -213,7 +211,7 @@ class ReviewAgentWorkflow:
 def _build_fallback_report(state: ReviewState) -> str:
     """Fallback report if Reporter fails"""
     lines = [
-        f"# 🤖 AI PR Review Report",
+        f"#  AI PR Review Report",
         f"",
         f"**PR:** {state.pr_url}",
         f"**Score:** {state.final_score:.1f}/10" if state.final_score else "**Score:** N/A",
@@ -225,25 +223,25 @@ def _build_fallback_report(state: ReviewState) -> str:
     ]
 
     if state.critical_issues:
-        lines.append("## 🚨 Critical Issues")
+        lines.append("## Critical Issues")
         for issue in state.critical_issues:
             lines.append(f"- **{issue.get('file', 'unknown')}**: {issue.get('issue', '')}")
         lines.append("")
 
     if state.security_issues:
-        lines.append("## 🔒 Security Issues")
+        lines.append("## Security Issues")
         for issue in state.security_issues:
             lines.append(f"- {issue.get('issue', '')}")
         lines.append("")
 
     if state.code_quality_issues:
-        lines.append("## 📝 Code Quality")
+        lines.append("## Code Quality")
         for issue in state.code_quality_issues:
             lines.append(f"- [{issue.get('severity', '?').upper()}] {issue.get('issue', '')}")
         lines.append("")
 
     if state.positive_aspects:
-        lines.append("## ✅ Positives")
+        lines.append("## Positives")
         for p in state.positive_aspects:
             lines.append(f"- {p}")
 
