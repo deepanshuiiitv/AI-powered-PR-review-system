@@ -258,11 +258,11 @@ The workflow at `.github/workflows/pr-review.yml` runs the reviewer automaticall
 
 ```
 ======================================================================
-🤖 AI-POWERED PR REVIEW SYSTEM (Agentic Architecture)
+ AI-POWERED PR REVIEW SYSTEM 
 ======================================================================
 
-📍 PR: deepanshuiiitv/AI-powered-PR-review-system#7
-🔗 URL: https://github.com/deepanshuiiitv/AI-powered-PR-review-system/pull/7
+PR: deepanshuiiitv/AI-powered-PR-review-system#7
+URL: https://github.com/deepanshuiiitv/AI-powered-PR-review-system/pull/7
 
 → Initializing agentic workflow...
 → Starting agent loop...
@@ -296,28 +296,28 @@ The workflow at `.github/workflows/pr-review.yml` runs the reviewer automaticall
   ✓ Report formatted
 ======================================================================
 
-# 🤖 AI Code Review
+#  AI Code Review
 
-## 🔴 REQUEST CHANGES
+##  REQUEST CHANGES
 
-**Quality Score:** 3/10  `███░░░░░░░`
+**Quality Score:** 3/10  `###-------`
 
-### 📋 Summary
+###  Summary
 Found 2 critical issue(s) that must be fixed before merging.
 
 ---
 
-## 🚨 Critical Issues (2)
+##  Critical Issues (2)
 
 ### 1. `testing purpose/database.py`
-❗ Issue: SQL query built via string concatenation
-✅ Fix: Use parameterized queries
+ Issue: SQL query built via string concatenation
+ Fix: Use parameterized queries
 
 ### 2. `testing purpose/auth.py`
-❗ Issue: Passwords hashed with MD5, hardcoded credential check
-✅ Fix: Use a salted hash (bcrypt/argon2) and remove the hardcoded admin check
+ Issue: Passwords hashed with MD5, hardcoded credential check
+ Fix: Use a salted hash (bcrypt/argon2) and remove the hardcoded admin check
 
-✨ Review complete!
+ Review complete!
 ```
 
 ---
