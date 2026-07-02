@@ -15,10 +15,10 @@ def parse_diff_tool(state: ReviewState) -> ReviewState:
         if not diff:
             state.parsed_diff_chunks = []
             state.parsed_metadata = {}
-            print("    ✓ No diff to parse")
+            print("    No diff to parse")
             return state
 
-        # ✅ FIX: Manual chunking (avoids PRParser method name issues)
+        # Manual chunking 
         CHUNK_SIZE = 3000
         chunks = []
         if len(diff) <= CHUNK_SIZE:
@@ -49,11 +49,11 @@ def parse_diff_tool(state: ReviewState) -> ReviewState:
             "deletions": state.pr_data.get("deletions", 0),
         }
 
-        print(f"    ✓ Created {len(chunks)} chunk(s)")
+        print(f"Created {len(chunks)} chunk(s)")
 
     except Exception as e:
         error_msg = f"Failed to parse diff: {e}"
-        print(f"    ✗ {error_msg}")
+        print(f"{error_msg}")
         state.add_error(error_msg)
 
     return state

@@ -74,11 +74,11 @@ def static_analysis_tool(state: ReviewState) -> ReviewState:
             })
         
         state.code_quality_issues.extend(issues)
-        print(f"    ✓ Found {len(issues)} issues")
+        print(f"    Found {len(issues)} issues")
         
     except Exception as e:
         error_msg = f"Static analysis error: {e}"
-        print(f"    ✗ {error_msg}")
+        print(f"    {error_msg}")
         state.add_error(error_msg)
     
     return state

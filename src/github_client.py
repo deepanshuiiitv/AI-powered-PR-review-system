@@ -21,7 +21,7 @@ class GitHubClient:
         if token:
             self.session.headers["Authorization"] = f"Bearer {token}"
 
-    # ── PR metadata ───────────────────────────────────────────
+    # ── PR metadata 
 
     def get_pr(self, owner: str, repo: str, number: int) -> dict:
         """Return full PR object."""
@@ -58,7 +58,7 @@ class GitHubClient:
         """Return existing review comments on the PR."""
         return self._get(f"/repos/{owner}/{repo}/issues/{number}/comments")
 
-    # ── Post comment ──────────────────────────────────────────
+    # ── Post comment 
 
     def post_comment(self, owner: str, repo: str, number: int, body: str) -> dict:
         """Post a comment on the PR (issue comment — visible in the conversation)."""
@@ -67,8 +67,7 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ── Helpers ───────────────────────────────────────────────
-
+    # ── Helpers 
     def _get(self, path: str, params: dict = None) -> any:
         resp = self.session.get(f"{self.BASE}{path}", params=params)
         resp.raise_for_status()

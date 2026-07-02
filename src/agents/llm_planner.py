@@ -1,6 +1,6 @@
 """
 LLM Planner: Uses LangChain's ChatGroq wrapper instead of raw Groq SDK.
-This enables automatic LangSmith tracing — no extra code needed.
+This enables automatic LangSmith tracing
 """
 
 import json
@@ -22,23 +22,23 @@ def llm_plan_tools(state: ReviewState, groq_api_key: str) -> ReviewState:
 
     planner_prompt = f"""You are planning which tools to run for a GitHub PR review.
 
-PR CONTEXT:
-- Title: {pr_data.get('title', 'N/A')}
-- Risk Level: {state.risk_level}
-- Changes: {pr_data.get('additions', 0) + pr_data.get('deletions', 0)} LOC
-- Files: {len(pr_files)} files changed: {file_list}
+                        PR CONTEXT:
+                        - Title: {pr_data.get('title', 'N/A')}
+                        - Risk Level: {state.risk_level}
+                        - Changes: {pr_data.get('additions', 0) + pr_data.get('deletions', 0)} LOC
+                        - Files: {len(pr_files)} files changed: {file_list}
 
-AVAILABLE TOOLS:
-- static_analysis
-- code_review
-- security_analysis
+                        AVAILABLE TOOLS:
+                        - static_analysis
+                        - code_review
+                        - security_analysis
 
-Return ONLY a JSON array of tool names. Example: ["code_review", "security_analysis"]
-No explanation, just the JSON array.
-"""
+                        Return ONLY a JSON array of tool names. Example: ["code_review", "security_analysis"]
+                        No explanation, just the JSON array.
+                        """
 
     try:
-        # ✅ .invoke() instead of .chat.completions.create()
+        # .invoke() instead of .chat.completions.create()
         # This call is automatically traced by LangSmith if env vars are set
         response = llm.invoke(planner_prompt)
         response_text = response.content.strip()
@@ -57,7 +57,7 @@ No explanation, just the JSON array.
 
         state.planned_tools = tools
         state.planner_reasoning = response_text
-        print(f"  [LLM Planner] Groq decided: {' → '.join(tools)}")
+        print(f"  [LLM Planner] Groq decided: {' ->  '.join(tools)}")
 
     except json.JSONDecodeError:
         print("  [LLM Planner] JSON parse failed, using fallback plan")

@@ -151,7 +151,7 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Verify it loaded correctly:
 
 ```bash
-python -c "from config import Config; c = Config(); print('✅ Key loaded:', c.groq_api_key[:8] + '...')"
+python -c "from config import Config; c = Config(); print('Key loaded:', c.groq_api_key[:8] + '...')"
 ```
 
 ### Dependencies
@@ -177,32 +177,32 @@ langchain-groq
 ### Quickstart
 
 ```bash
-python main.py --pr https://github.com/owner/repo/pull/42
+python3 main.py --pr https://github.com/owner/repo/pull/42
 ```
 
 ### Owner / repo / number syntax
 
 ```bash
-python main.py --owner owner --repo repo --number 42
+python3 main.py --owner owner --repo repo --number 42
 ```
 
 ### Save the report to a file
 
 ```bash
-python main.py --pr https://github.com/owner/repo/pull/42 --output file
+python3 main.py --pr https://github.com/owner/repo/pull/42 --output file
 # Saves to: pr_review_owner_repo_42.md
 ```
 
 ### Print and save
 
 ```bash
-python main.py --pr https://github.com/owner/repo/pull/42 --output both
+python3 main.py --pr https://github.com/owner/repo/pull/42 --output both
 ```
 
 ### Post the review as a GitHub PR comment
 
 ```bash
-python main.py --pr https://github.com/owner/repo/pull/42 --post-comment
+python3 main.py --pr https://github.com/owner/repo/pull/42 --post-comment
 # Requires GITHUB_TOKEN in .env
 ```
 

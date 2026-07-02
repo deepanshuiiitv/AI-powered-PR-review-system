@@ -7,15 +7,15 @@ from typing import Any
 
 
 VERDICT_BADGE = {
-    "APPROVE":         "🟢 APPROVE",
-    "REQUEST_CHANGES": "🔴 REQUEST CHANGES",
-    "COMMENT":         "🟡 COMMENT",
+    "APPROVE":         " APPROVE",
+    "REQUEST_CHANGES": " REQUEST CHANGES",
+    "COMMENT":         " COMMENT",
 }
 
 RISK_EMOJI = {
-    "high":   "🚨",
-    "medium": "⚠️",
-    "low":    "ℹ️",
+    "high":   "!!!",
+    "medium": "!!",
+    "low":    "!",
 }
 
 
@@ -28,7 +28,7 @@ class Reporter:
         stars = self._score_bar(score)
 
         lines = [
-            "# 🤖 AI Code Review",
+            "# AI Code Review",
             "",
             f"> **Generated:** {now}  ",
             f"> **Model:** Groq LLM (free tier)  ",
@@ -40,7 +40,7 @@ class Reporter:
             "",
             f"**Quality Score:** {score}/10  {stars}",
             "",
-            "### 📋 Summary",
+            "### Summary",
             "",
             review.get("summary", "_No summary provided._"),
             "",
@@ -52,7 +52,7 @@ class Reporter:
             lines += [
                 f"---",
                 "",
-                f"## 🚨 Critical Issues  ({len(critical)})",
+                f"## Critical Issues  ({len(critical)})",
                 "",
                 "_These must be addressed before merging._",
                 "",
@@ -62,9 +62,9 @@ class Reporter:
                     f"### {i}. `{item.get('file', 'unknown')}`",
                     f"**Location:** {item.get('line_hint', 'N/A')}",
                     "",
-                    f"❗ **Issue:** {item.get('issue', '')}",
+                    f" **Issue:** {item.get('issue', '')}",
                     "",
-                    f"✅ **Fix:** {item.get('suggestion', '')}",
+                    f" **Fix:** {item.get('suggestion', '')}",
                     "",
                 ]
 
@@ -74,12 +74,12 @@ class Reporter:
             lines += [
                 "---",
                 "",
-                f"## 🔒 Security Concerns  ({len(security)})",
+                f"## Security Concerns  ({len(security)})",
                 "",
             ]
             for item in security:
                 risk = item.get("risk_level", "medium").lower()
-                emoji = RISK_EMOJI.get(risk, "⚠️")
+                emoji = RISK_EMOJI.get(risk, "")
                 lines += [
                     f"- {emoji} **[{risk.upper()}]** `{item.get('file', 'unknown')}`  ",
                     f"  {item.get('concern', '')}",
@@ -92,7 +92,7 @@ class Reporter:
             lines += [
                 "---",
                 "",
-                f"## 💡 Suggested Improvements  ({len(improvements)})",
+                f"## Suggested Improvements  ({len(improvements)})",
                 "",
             ]
             for item in improvements[:15]:   # cap at 15
@@ -108,7 +108,7 @@ class Reporter:
             lines += [
                 "---",
                 "",
-                f"## 🧪 Missing Test Coverage  ({len(missing_tests)})",
+                f"## Missing Test Coverage  ({len(missing_tests)})",
                 "",
             ]
             for t in missing_tests:
@@ -121,7 +121,7 @@ class Reporter:
             lines += [
                 "---",
                 "",
-                "## 👍 Positive Aspects",
+                "## Positive Aspects",
                 "",
             ]
             for p in positive:
@@ -134,19 +134,26 @@ class Reporter:
             lines += [
                 "---",
                 "",
-                "## 📌 General Recommendations",
+                "## General Recommendations",
                 "",
             ]
+
             for r in recs:
-                lines.append(f"- {r}")
-            lines.append("")
+                area = r.get("area", "General")
+                suggestion = r.get("suggestion", "")
+
+                lines.extend([
+                    f"### {area}",
+                    f"- {suggestion}",
+                    ""
+                ])
 
         # ── Stats footer ──────────────────────────────────────
         stats = parsed.get("stats", {})
         lines += [
             "---",
             "",
-            "## 📊 PR Statistics",
+            "## PR Statistics",
             "",
             f"| Metric | Value |",
             f"|--------|-------|",
@@ -156,7 +163,7 @@ class Reporter:
             f"| Lines removed | -{stats.get('total_deletions', 0)} |",
             f"| Diff size | {stats.get('diff_size_chars', 0):,} chars |",
             "",
-            "_🤖 Reviewed by [AI PR Reviewer](https://github.com) using Groq (free tier) — zero cost._",
+            "Reviewed by [AI PR Reviewer](https://github.com/deepanshuiiitv/AI-powered-PR-review-system) using Groq (free tier) — zero cost.",
         ]
 
         return "\n".join(lines)
@@ -168,6 +175,6 @@ class Reporter:
             n = int(score)
         except (TypeError, ValueError):
             return ""
-        filled = "█" * n
-        empty = "░" * (10 - n)
+        filled = "#" * n
+        empty = "-" * (10 - n)
         return f"`{filled}{empty}`"

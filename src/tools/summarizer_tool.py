@@ -51,13 +51,13 @@ def summarizer_tool(state: ReviewState) -> ReviewState:
         state.final_verdict = verdict
         state.final_summary = summary
         
-        print(f"    ✓ Score: {score:.1f}/10")
-        print(f"    ✓ Verdict: {verdict}")
+        print(f"    Score: {score:.1f}/10")
+        print(f"    Verdict: {verdict}")
         print(f"      Issues - Critical: {critical_count}, High: {high_count}, Medium: {medium_count}, Low: {low_count}")
         
     except Exception as e:
         error_msg = f"Summarizer error: {e}"
-        print(f"    ✗ {error_msg}")
+        print(f"    {error_msg}")
         state.add_error(error_msg)
         # Set safe defaults
         state.final_score = 5.0

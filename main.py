@@ -53,20 +53,20 @@ def main():
         description="AI-Powered PR Review System (Agentic Architecture)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Simple usage with PR URL
-  python main.py --pr https://github.com/owner/repo/pull/42
-  
-  # Save to file
-  python main.py --pr URL --output file
-  
-  # Post as GitHub comment
-  python main.py --pr URL --post-comment
-  
-  # Alternative syntax (owner/repo/number)
-  python main.py --owner owner --repo repo --number 42
-        """
-    )
+                Examples:
+                # Simple usage with PR URL
+                python main.py --pr https://github.com/owner/repo/pull/42
+                
+                # Save to file
+                python main.py --pr URL --output file
+                
+                # Post as GitHub comment
+                python main.py --pr URL --post-comment
+                
+                # Alternative syntax (owner/repo/number)
+                python main.py --owner owner --repo repo --number 42
+                        """
+                    )
     
     # PR specification (mutually exclusive)
     pr_spec = parser.add_mutually_exclusive_group(required=True)
@@ -119,7 +119,7 @@ Examples:
     try:
         config = Config()
     except Exception as e:
-        print(f"❌ Configuration error: {e}")
+        print(f"Configuration error: {e}")
         sys.exit(1)
     
     # Parse PR location
@@ -135,7 +135,7 @@ Examples:
                 parser.error("--owner, --repo, and --number are all required")
             pr_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     except Exception as e:
-        print(f"❌ PR URL parsing error: {e}")
+        print(f"PR URL parsing error: {e}")
         sys.exit(1)
     
     # Create initial state
@@ -147,20 +147,20 @@ Examples:
     )
     
     print("=" * 70)
-    print("🤖 AI-POWERED PR REVIEW SYSTEM (Agentic Architecture)")
+    print("AI-POWERED PR REVIEW SYSTEM ")
     print("=" * 70)
-    print(f"\n📍 PR: {owner}/{repo}#{pr_number}")
-    print(f"🔗 URL: {pr_url}\n")
+    print(f"\n PR: {owner}/{repo}#{pr_number}")
+    print(f" URL: {pr_url}\n")
     
     # Create and run agentic workflow
     try:
-        print("→ Initializing agentic workflow...\n")
+        print("-> Initializing agentic workflow...\n")
         workflow = ReviewAgentWorkflow(
             groq_api_key=config.groq_api_key,
             github_token=config.github_token
         )
         
-        print("→ Starting agent loop...\n")
+        print("-> Starting agent loop...\n")
         print("=" * 70)
         
         # Run the workflow
@@ -170,7 +170,7 @@ Examples:
         
         # Handle output
         if final_state.errors:
-            print("\n⚠️  Errors encountered:")
+            print("\nErrors encountered:")
             for error in final_state.errors:
                 print(f"   - {error}")
         
@@ -184,13 +184,13 @@ Examples:
                 filename = f"pr_review_{owner}_{repo}_{pr_number}.md"
                 with open(filename, "w") as f:
                     f.write(report)
-                print(f"\n✅ Report saved to: {filename}")
+                print(f"\nReport saved to: {filename}")
             
             if args.post_comment:
                 if not config.github_token:
-                    print("\n⚠️  --post-comment requires GITHUB_TOKEN in .env (skipping)")
+                    print("\n --post-comment requires GITHUB_TOKEN in .env (skipping)")
                 else:
-                    print("\n→ Posting comment to GitHub...")
+                    print("\n-> Posting comment to GitHub...")
                     try:
                         client = GitHubClient(config.github_token)
                         client.post_comment(
@@ -199,19 +199,19 @@ Examples:
                             number=pr_number,
                             body=final_state.formatted_report,
                         )
-                        print(f"   ✓ Comment posted on PR #{pr_number}")
+                        print(f"  Comment posted on PR #{pr_number}")
                     except Exception as e:
-                        print(f"   ✗ Failed to post comment: {e}")
+                        print(f"  Failed to post comment: {e}")
 
         
-        print("\n✨ Review complete!")
+        print("\n Review complete!")
         print("=" * 70)
         
     except KeyboardInterrupt:
-        print("\n\n❌ Review cancelled by user")
+        print("\n\n Review cancelled by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n\n❌ Workflow error: {e}")
+        print(f"\n\n Workflow error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

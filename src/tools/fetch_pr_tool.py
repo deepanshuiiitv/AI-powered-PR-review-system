@@ -16,7 +16,6 @@ def fetch_pr_tool(state: ReviewState, github_token: str = None) -> ReviewState:
     print("  [Tool] Fetching PR from GitHub...")
 
     try:
-        # ✅ FIX: Check GitHubClient's actual __init__ signature
         # Most use positional or 'token' not 'github_token'
         if github_token:
             client = GitHubClient(github_token)
@@ -39,11 +38,11 @@ def fetch_pr_tool(state: ReviewState, github_token: str = None) -> ReviewState:
         pr_diff = client.get_pr_diff(owner, repo, pr_number)
         state.pr_diff = pr_diff
 
-        print(f"    ✓ Fetched {len(pr_files)} files, {len(pr_diff)} chars diff")
+        print(f"   Fetched {len(pr_files)} files, {len(pr_diff)} chars diff")
 
     except Exception as e:
         error_msg = f"Failed to fetch PR: {e}"
-        print(f"    ✗ {error_msg}")
+        print(f"   {error_msg}")
         state.add_error(error_msg)
 
     return state
