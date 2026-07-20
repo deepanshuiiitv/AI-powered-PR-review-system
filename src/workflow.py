@@ -69,6 +69,8 @@ class ReviewAgentWorkflow:
 
             if len(state.critical_issues) > 0 and not state.deep_security_done:
                 print("\n->  Agent Decision: Critical issues found, running deeper security")
+                state.critical_issues = []      
+                state.security_issues = []      
                 state.planned_tools = ["security_analysis"]
                 state.deep_security_done = True
                 state.needs_more_analysis = True
@@ -78,6 +80,7 @@ class ReviewAgentWorkflow:
                 already_ran = any("static" in t for t in state.planned_tools)
                 if not already_ran:
                     print("\n->  Agent Decision: Code issues found, running static analysis")
+                    state.code_quality_issues = []   
                     state.planned_tools = ["static_analysis"]
                     state.needs_more_analysis = True
                     return state
